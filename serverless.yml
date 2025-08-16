@@ -1,0 +1,87 @@
+service: bank-liquidity-risk-management
+
+provider:
+  name: aws
+  runtime: python3.9
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    S3_BUCKET: ${self:custom.s3Bucket}
+    KINESIS_STREAM: ${self:custom.kinesisStream}
+    DYNAMODB_TABLE: ${self:custom.dynamoTable}
+  
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:GetObject
+        - s3:PutObject
+        - s3:DeleteObject
+      Resource: "arn:aws:s3:::${self:custom.s3Bucket}/*"
+    - Effect: Allow
+      Action:
+        - kinesis:PutRecord
+        - kinesis:PutRecords
+        - kinesis:GetRecords
+        - kinesis:GetShardIterator
+        - kinesis:DescribeStream
+        - kinesis:ListStreams
+      Resource: "arn:aws:kinesis:${self:provider.region}:*:stream/${self:custom.kinesisStream}"
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoTable}"
+
+custom:
+  s3Bucket: bank-liquidity-data-${self:provider.stage}
+  kinesisStream: liquidity-risk-stream-${self:provider.stage}
+  dynamoTable: liquidity-risk-data-${self:provider.stage}
+
+functions:
+  s3TriggerHandler:
+    handler: src/handlers/s3_trigger_handler.lambda_handler
+    events:
+      - s3:
+          bucket: ${self:custom.s3Bucket}
+          event: s3:ObjectCreated:*
+          rules:
+            - suffix: .csv
+            - suffix: .json
+            - suffix: .parquet
+    timeout: 300
+    memorySize: 1024
+
+  kinesisProcessor:
+    handler: src/handlers/kinesis_processor.lambda_handler
+    events:
+      - stream:
+          type: kinesis
+          arn: "arn:aws:kinesis:${self:provider.region}:*:stream/${self:custom.kinesisStream}"
+          batchSize: 10
+          startingPosition: TRIM_HORIZON
+    timeout: 300
+    memorySize: 2048
+
+resources:
+  Resources:
+    LiquidityDataBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.s3Bucket}
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
