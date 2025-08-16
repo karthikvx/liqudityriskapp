@@ -138,32 +138,9 @@ The system supports major regulatory frameworks:
 -
 ## Liquidity Risk Monitoring System
 *Real-time processing of global cash positions for Basel III compliance*
-
-```mermaid
-%% Copy this into any Mermaid-compatible viewer (GitHub/GitLab docs, VS Code, etc.)
-sequenceDiagram
-    participant S3 as S3 Bucket<br>(Raw Position Files)
-    participant L1 as Lambda Trigger
-    participant KDS as Kinesis<br>Data Stream
-    participant L2 as Lambda Processor
-    participant DDB as DynamoDB<br>(Risk Positions)
-    participant CW as CloudWatch
-
-    Note over S3,DDB: Daily Processing Flow
-    S3->>L1: Treasury uploads<br>liquidity_positions_YYYYMMDD.csv
-    L1->>KDS: Stream validated records
-    KDS->>L2: Batched position updates
-    L2->>DDB: Write risk-adjusted amounts
-    L2->>CW: Log transformation metrics
-    
-    Note over DDB: Risk Calculations
-    loop Every 15 mins
-        DDB->>L2: Trigger aggregation
-        L2->>DDB: Update currency exposures
-        L2->>CW: Alert if LCR < 100%
-    end
-```
-
+-
+![sequence Diagram](./assets/sequence-diagram.png)
+-
 ### Key Features
 1. **Automated Ingestion**
    - Processes files from `s3://<bucket>/raw/<region>/YYYY/MM/DD/`
@@ -185,24 +162,10 @@ sequenceDiagram
 
 
 5. **Usecase 1**
-```mermaid
-flowchart TD
-    subgraph AWS Architecture
-        S3[S3 Bucket\nRaw Position Files] -->|PutObject Event| Lambda1[Trigger Lambda]
-        Lambda1 -->|PutRecords| Kinesis[Kinesis Data Stream]
-        Kinesis --> Lambda2[Processor Lambda]
-        Lambda2 --> DynamoDB[(DynamoDB\nRisk Positions)]
-        Lambda1 --> CloudWatch[CloudWatch Logs]
-    end
-    
-    subgraph Data Flow
-        direction LR
-        Start[CSV Upload] --> Validation[Validate:\n- Filename\n- Columns\n- Amounts]
-        Validation --> Transformation[Apply:\n- Risk Weights\n- Currency Haircuts]
-        Transformation --> Storage[Store:\n- Net Amount\n- RiskAdj Amount\n- LCR%]
-    end
-```
-
+-
+![User Case 1](./assets/usecase-1.png)
+-
+-
 ### Usage Example
 ```bash
 # Deploy for EMEA region
