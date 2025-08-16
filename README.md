@@ -1,7 +1,9 @@
 # Bank Liquidity Risk Management System
 
 A comprehensive AWS-based system for managing liquidity risk in banking operations, designed to handle large-scale financial data processing and ensure regulatory compliance.
-
+-
+- ![Architecture](./assets/liquidityrisk_etl_app.png)
+-
 ## Architecture Overview
 
 The system follows a serverless, event-driven architecture:
@@ -131,6 +133,90 @@ The system supports major regulatory frameworks:
 - DFAST (Dodd-Frank Act Stress Testing)
 - CECL (Current Expected Credit Loss)
 - IFRS 9 (International Financial Reporting Standards)
+
+-
+-
+## Liquidity Risk Monitoring System
+*Real-time processing of global cash positions for Basel III compliance*
+
+```mermaid
+%% Copy this into any Mermaid-compatible viewer (GitHub/GitLab docs, VS Code, etc.)
+sequenceDiagram
+    participant S3 as S3 Bucket<br>(Raw Position Files)
+    participant L1 as Lambda Trigger
+    participant KDS as Kinesis<br>Data Stream
+    participant L2 as Lambda Processor
+    participant DDB as DynamoDB<br>(Risk Positions)
+    participant CW as CloudWatch
+
+    Note over S3,DDB: Daily Processing Flow
+    S3->>L1: Treasury uploads<br>liquidity_positions_YYYYMMDD.csv
+    L1->>KDS: Stream validated records
+    KDS->>L2: Batched position updates
+    L2->>DDB: Write risk-adjusted amounts
+    L2->>CW: Log transformation metrics
+    
+    Note over DDB: Risk Calculations
+    loop Every 15 mins
+        DDB->>L2: Trigger aggregation
+        L2->>DDB: Update currency exposures
+        L2->>CW: Alert if LCR < 100%
+    end
+```
+
+### Key Features
+1. **Automated Ingestion**
+   - Processes files from `s3://<bucket>/raw/<region>/YYYY/MM/DD/`
+   - Validates file structure via `src/utils/validators.py`
+
+2. **Risk Transformation**
+   ```python
+   # src/models/transformation_models.py
+   def apply_risk_weights(amount: float, currency: str) -> float:
+       return amount * RISK_WEIGHTS[currency]  # Basel III haircuts
+   ```
+
+3. **Regulatory Monitoring**
+   - Real-time LCR (Liquidity Coverage Ratio) tracking
+   - Threshold alerts in `monitoring/cloudwatch_alarms.py`
+
+4. **Data Flow**
+## Liquidity Risk Monitoring System
+
+
+5. **Usecase 1**
+```mermaid
+flowchart TD
+    subgraph AWS Architecture
+        S3[S3 Bucket\nRaw Position Files] -->|PutObject Event| Lambda1[Trigger Lambda]
+        Lambda1 -->|PutRecords| Kinesis[Kinesis Data Stream]
+        Kinesis --> Lambda2[Processor Lambda]
+        Lambda2 --> DynamoDB[(DynamoDB\nRisk Positions)]
+        Lambda1 --> CloudWatch[CloudWatch Logs]
+    end
+    
+    subgraph Data Flow
+        direction LR
+        Start[CSV Upload] --> Validation[Validate:\n- Filename\n- Columns\n- Amounts]
+        Validation --> Transformation[Apply:\n- Risk Weights\n- Currency Haircuts]
+        Transformation --> Storage[Store:\n- Net Amount\n- RiskAdj Amount\n- LCR%]
+    end
+```
+
+### Usage Example
+```bash
+# Deploy for EMEA region
+cd terraform
+terraform apply -var="region=eu-central-1" -var="env=prod"
+```
+
+**Compliance Targets**
+- ✅ 30-minute position freshness (Basel III)
+- 🔄 99.9% event processing success
+- 🚨 <5 minute alert latency
+-
+-
+
 
 ## Support
 
